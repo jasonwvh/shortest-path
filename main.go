@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -53,6 +54,37 @@ func initTopology(db *sql.DB) error {
 
 	fmt.Println("initialization complete")
 	return nil
+}
+
+type Point struct {
+	ID   int
+	Name string
+}
+
+func findOsmIDByName(db *sql.DB, name string) ([]Point, error) {
+	findOsmIDSQL := `
+		SELECT osm_id, name
+		FROM planet_osm_point
+		WHERE name LIKE '%' || $1 || '%'
+		LIMIT 10;
+	`
+
+	rows, err := db.Query(findOsmIDSQL, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []Point
+	for rows.Next() {
+		var point Point
+		if err := rows.Scan(&point.ID, &point.Name); err != nil {
+			return nil, err
+		}
+		points = append(points, point)
+	}
+
+	return points, nil
 }
 
 func findCoords(db *sql.DB, id int) (Coordinate, error) {
@@ -196,6 +228,24 @@ func main() {
 	}
 
 	tmpl := template.Must(template.New("map.gohtml").ParseFiles("map.gohtml"))
+
+	http.HandleFunc("/lookup", func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Query().Get("name")
+		if name == "" {
+			http.Error(w, "name parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		points, err := findOsmIDByName(db, name)
+		if err != nil {
+			http.Error(w, "Error finding osm_id by name", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(points)
+	})
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		osmIDs := r.URL.Query()["osm_id"]
 		if len(osmIDs) == 0 {

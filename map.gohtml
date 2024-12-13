@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html xmlns="http://www.w3.org/1999/html">
 <head>
     <title>OpenStreetMap with Roads Layer</title>
     <meta charset="utf-8" />
@@ -12,6 +12,12 @@
     </style>
 </head>
 <body>
+<form id="searchForm">
+    <label for="name">Search Name:</label>
+    <input type="text" id="name" name="name" list="resultsDropdown">
+    <datalist id="resultsDropdown"></datalist>
+    <button type="submit">Search</button>
+</form>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script>
@@ -35,6 +41,43 @@
     });
 
     L.polyline(allLatLngs, {color: 'blue'}).addTo(map);
+</script>
+<script>
+    var timeout = null;
+
+    document.getElementById('name').addEventListener('input', function() {
+        console.log("searching")
+        clearTimeout(timeout);
+        var name = this.value;
+        if (name.length > 2) {
+            timeout = setTimeout(function() {
+                fetch('/lookup?name=' + name)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(data)
+                        var dropdown = document.getElementById('resultsDropdown');
+                        dropdown.innerHTML = '';
+                        data.forEach(function(point) {
+                            var option = document.createElement('option');
+                            option.value = point.ID;
+                            option.text = point.Name;
+                            dropdown.appendChild(option);
+                        });
+                    });
+            }, 2000); // 2 seconds delay
+        }
+    });
+
+    document.getElementById('searchForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        var osmID = document.getElementById('name').value;
+        if (osmID) {
+            var url = new URL(window.location.href);
+            var params = url.searchParams;
+            params.append('osm_id', osmID);
+            window.location.href = url.toString();
+        }
+    });
 </script>
 </body>
 </html>
